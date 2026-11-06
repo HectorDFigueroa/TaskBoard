@@ -25,6 +25,29 @@ export function totalConInteres(monto, tipo, tasa, dias) {
   return P;
 }
 
+// Saldo de una deuda a una fecha, con sus abonos. Misma fórmula que el backend:
+// cada abono cubre primero el interés acumulado y luego el capital.
+export function saldoALaFecha({ monto, tipo_interes, tasa_interes, fecha: inicio, pagos = [] }, hasta) {
+  const r = (Number(tasa_interes) || 0) / 100;
+  let capital = Number(monto) || 0;
+  let interes = 0;
+  let desde = inicio;
+  const avanzarHasta = (f) => {
+    const t = Math.max(0, diasEntre(desde, f)) / 30;
+    if (tipo_interes === 'simple') interes += capital * r * t;
+    else if (tipo_interes === 'compuesto') interes += (capital + interes) * (Math.pow(1 + r, t) - 1);
+    desde = f;
+  };
+  for (const pago of pagos) {
+    avanzarHasta(pago.fecha);
+    const aInteres = Math.min(pago.monto, interes);
+    interes -= aInteres;
+    capital -= pago.monto - aInteres;
+  }
+  avanzarHasta(hasta);
+  return { capital, interes, saldo: Math.round((capital + interes) * 100) / 100 };
+}
+
 export const iniciales = (nombre = '') =>
   nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
 

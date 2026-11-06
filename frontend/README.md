@@ -29,21 +29,25 @@ src/
 ├── components/
 │   ├── DeudaCard.jsx     # Tarjeta de deuda (botones según permisos del backend)
 │   ├── DeudaForm.jsx     # Crear / editar deuda, con vista previa del interés
-│   ├── PagarForm.jsx     # Confirmar pago con total + interés
+│   ├── PagarForm.jsx     # Registrar un pago: todo el saldo o un abono parcial
+│   ├── ApuestaCard.jsx   # Tarjeta de apuesta (botones según permisos del backend)
+│   ├── ApuestaForm.jsx   # Crear apuesta con oponente y juez registrados
+│   ├── DecidirForm.jsx   # El juez declara al ganador o anula
 │   ├── UI.jsx            # Modal, cargando, errores, toasts, aviso de Render
 │   └── Doodles.jsx       # Garabatos SVG decorativos
 └── pages/
     ├── Login.jsx         # Ingresar / crear cuenta
     ├── Inicio.jsx        # Balance neto, totales y balance por persona
     ├── Deudas.jsx        # Lista con filtros y búsqueda
-    └── Solicitudes.jsx   # Deudas que otros me vincularon
+    ├── Solicitudes.jsx   # Deudas que otros me vincularon
+    └── Apuestas.jsx      # Apuestas entre dos usuarios con un tercero de juez
 ```
 
 ## Requisitos del taller cubiertos
 
 - **Formulario con validación de campos vacíos** (se valida en el cliente y el backend vuelve a validar).
 - **Indicación visual de las completadas**: las deudas pagadas salen tachadas con un sello "PAGADA".
-- **Acciones**: crear, editar, marcar pagada, reabrir, eliminar, aceptar y rechazar.
+- **Acciones**: crear, editar, registrar pagos y abonos, reabrir, eliminar, aceptar y rechazar.
 - **Mensajes de carga y de error**: si una petición tarda más de 2,5 s aparece el aviso
   *"Despertando el servidor…"* (el plan gratis de Render se duerme tras 15 min sin uso).
 - **Diseño responsivo**: menú superior en computador y barra inferior en celular.

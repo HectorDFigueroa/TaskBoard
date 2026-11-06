@@ -13,6 +13,22 @@ export const pool = new pg.Pool({
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
+/** Ejecuta fn(cliente) en una transacción: si lanza un error, se deshace todo. */
+export async function enTransaccion(fn) {
+  const cliente = await pool.connect();
+  try {
+    await cliente.query('BEGIN');
+    const resultado = await fn(cliente);
+    await cliente.query('COMMIT');
+    return resultado;
+  } catch (err) {
+    await cliente.query('ROLLBACK');
+    throw err;
+  } finally {
+    cliente.release();
+  }
+}
+
 export async function initDb() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const sql = await readFile(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8');

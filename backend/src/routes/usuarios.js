@@ -16,7 +16,7 @@ router.get('/buscar', requireAuth, h(async (req, res) => {
   if (!username) return res.status(400).json({ errores: ['Indica un username'] });
 
   if (username === req.usuario.username) {
-    return res.status(400).json({ errores: ['No puedes vincular una deuda contigo mismo'] }); // RN-13
+    return res.status(400).json({ errores: ['No puedes elegirte a ti mismo'] }); // RN-13
   }
 
   const { rows } = await pool.query(

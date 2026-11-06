@@ -27,10 +27,11 @@ function EstadoVinculo({ d }) {
  * Tarjeta de una deuda. Los botones dependen de `d.permisos`,
  * que calcula el backend (así el frontend no repite las reglas de negocio).
  */
-export default function DeudaCard({ d, onPagar, onReabrir, onEditar, onEliminar, onAceptar, onRechazar, ocupado }) {
+export default function DeudaCard({ d, onPagar, onReabrir, onEditar, onEliminar, onAceptar, onRechazar, onDeshacerAbono, ocupado }) {
   const meDeben = d.tipo === 'me_deben';
   const conInteres = d.tipo_interes !== 'ninguno';
   const p = d.permisos;
+  const tieneAbonos = d.pagos.length > 0;
 
   return (
     <article className={`deuda ${meDeben ? 'deuda-meDeben' : 'deuda-debo'} ${d.pagada ? 'deuda-pagada' : ''}`}>
@@ -56,7 +57,27 @@ export default function DeudaCard({ d, onPagar, onReabrir, onEditar, onEliminar,
             {d.tasa_interes}% mensual {d.tipo_interes} · {d.dias_transcurridos} días
           </span>
         )}
+        {tieneAbonos && !d.pagada && (
+          <span className="monto-detalle">Saldo pendiente · ya abonaron {pesos(d.abonado)}</span>
+        )}
       </div>
+
+      {tieneAbonos && (
+        <details className="abonos">
+          <summary>{d.pagos.length === 1 ? '1 pago registrado' : `${d.pagos.length} pagos registrados`}</summary>
+          <ul>
+            {d.pagos.map((pago, i) => (
+              <li key={pago.id}>
+                <span>{fecha(pago.fecha)}</span>
+                <strong>{pesos(pago.monto)}</strong>
+                {p.deshacer_abono && i === d.pagos.length - 1 && (
+                  <button className="link-lima" disabled={ocupado} onClick={() => onDeshacerAbono(d, pago)}>Deshacer</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <div className="deuda-chips">
         <span className="chip">📅 {fecha(d.fecha)}</span>
@@ -76,7 +97,7 @@ export default function DeudaCard({ d, onPagar, onReabrir, onEditar, onEliminar,
             <button className="btn btn-borde btn-sm" disabled={ocupado} onClick={() => onRechazar(d)}>Rechazar</button>
           </>
         )}
-        {p.pagar && <button className="btn btn-lima btn-sm" disabled={ocupado} onClick={() => onPagar(d)}>💸 Marcar pagada</button>}
+        {p.pagar && <button className="btn btn-lima btn-sm" disabled={ocupado} onClick={() => onPagar(d)}>💸 Registrar pago</button>}
         {p.reabrir && <button className="btn btn-borde btn-sm" disabled={ocupado} onClick={() => onReabrir(d)}>↺ Reabrir</button>}
         {(p.editar || p.editar_concepto) && (
           <button className="btn btn-borde btn-sm" disabled={ocupado} onClick={() => onEditar(d)}>✎ Editar</button>

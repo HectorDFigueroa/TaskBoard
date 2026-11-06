@@ -9,19 +9,46 @@ const redondear = (n) => Math.round(n * 100) / 100;
  *   P = capital, r = tasa mensual (decimal), t = meses = días / 30
  *   simple:    total = P * (1 + r*t)
  *   compuesto: total = P * (1 + r)^t
+ *
+ * Con pagos (en orden de fecha), el interés se calcula por tramos: cada pago cubre
+ * primero el interés acumulado y luego el capital, y el siguiente tramo corre sobre
+ * lo que quedó.
+ *
+ * Devuelve:
+ *   total   = saldo pendiente en esa fecha
+ *   interes = interés generado en toda la deuda, incluido el ya pagado
  */
-export function calcularInteres({ monto, tipo_interes, tasa_interes, fecha }, hasta = hoyISO()) {
-  const dias = Math.max(0, diasEntre(fecha, hasta));
-  const t = dias / DIAS_POR_MES;
+export function calcularInteres({ monto, tipo_interes, tasa_interes, fecha }, hasta = hoyISO(), pagos = []) {
   const r = Number(tasa_interes) / 100;
   const P = Number(monto);
+  let capital = P;
+  let interes = 0;
+  let abonado = 0;
+  let desde = fecha;
 
-  let total = P;
-  if (tipo_interes === 'simple') total = P * (1 + r * t);
-  else if (tipo_interes === 'compuesto') total = P * Math.pow(1 + r, t);
+  const avanzarHasta = (f) => {
+    const t = Math.max(0, diasEntre(desde, f)) / DIAS_POR_MES;
+    if (tipo_interes === 'simple') interes += capital * r * t;
+    else if (tipo_interes === 'compuesto') interes += (capital + interes) * (Math.pow(1 + r, t) - 1);
+    desde = f;
+  };
 
-  total = redondear(total);
-  return { dias, interes: redondear(total - P), total };
+  for (const pago of pagos) {
+    avanzarHasta(pago.fecha);
+    const aInteres = Math.min(pago.monto, interes);
+    interes -= aInteres;
+    capital -= pago.monto - aInteres;
+    abonado += pago.monto;
+  }
+  avanzarHasta(hasta);
+
+  const total = redondear(capital + interes);
+  return {
+    dias: Math.max(0, diasEntre(fecha, hasta)),
+    interes: redondear(total + abonado - P),
+    total,
+    abonado: redondear(abonado),
+  };
 }
 
 /**

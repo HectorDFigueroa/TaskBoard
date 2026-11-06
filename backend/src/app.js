@@ -4,6 +4,8 @@ import { pool } from './db.js';
 import authRouter from './routes/auth.js';
 import usuariosRouter from './routes/usuarios.js';
 import deudasRouter from './routes/deudas.js';
+import apuestasRouter from './routes/apuestas.js';
+import { ErrorHttp } from './utils/errores.js';
 
 export function crearApp() {
   const app = express();
@@ -31,12 +33,16 @@ export function crearApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/usuarios', usuariosRouter);
   app.use('/api/deudas', deudasRouter);
+  app.use('/api/apuestas', apuestasRouter);
 
   // 404 para rutas desconocidas
   app.use((_req, res) => res.status(404).json({ errores: ['Ruta no encontrada'] }));
 
   // Manejador central de errores (RNF-04)
   app.use((err, _req, res, _next) => {
+    if (err instanceof ErrorHttp) {
+      return res.status(err.status).json({ errores: [err.message] });
+    }
     if (err.type === 'entity.parse.failed') {
       return res.status(400).json({ errores: ['El cuerpo de la petición no es JSON válido'] });
     }

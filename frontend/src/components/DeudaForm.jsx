@@ -10,7 +10,8 @@ import { Errores } from './UI.jsx';
  */
 export default function DeudaForm({ deuda, onGuardada, onCancelar }) {
   const editando = !!deuda;
-  const soloConcepto = editando && deuda.estado_vinculo === 'aceptada';
+  const conAbonos = editando && deuda.pagos.length > 0;
+  const soloConcepto = editando && (deuda.estado_vinculo === 'aceptada' || conAbonos);
   const vinculada = editando && !!deuda.usuario_vinculado;
 
   const [f, setF] = useState({
@@ -114,7 +115,11 @@ export default function DeudaForm({ deuda, onGuardada, onCancelar }) {
   return (
     <form className="form" onSubmit={enviar} noValidate>
       {soloConcepto && (
-        <p className="nota">🤝 @{deuda.usuario_vinculado} ya aceptó esta deuda, así que solo puedes cambiar el concepto.</p>
+        <p className="nota">
+          {conAbonos
+            ? '💸 Esta deuda ya tiene abonos, así que solo puedes cambiar el concepto.'
+            : `🤝 @${deuda.usuario_vinculado} ya aceptó esta deuda, así que solo puedes cambiar el concepto.`}
+        </p>
       )}
 
       {!soloConcepto && (

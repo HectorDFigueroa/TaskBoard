@@ -177,7 +177,7 @@ h1, h2, h3, p { margin: 0; }
 .bloque-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .bloque-cabeza h2, .titulo-seccion { font-size: clamp(26px, 3.4vw, 36px); display: flex; align-items: center; gap: 12px; }
 .garabato-titulo { width: 70px; height: 20px; flex-shrink: 0; }
-.pagina-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.pagina-cabeza { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .intro { color: var(--suave); margin-bottom: 20px; max-width: 620px; }
 
 /* ---------- Personas (estilo "featured projects") ---------- */
@@ -242,12 +242,47 @@ h1, h2, h3, p { margin: 0; }
 .chip-ok { background: rgba(46,230,166,.12); color: #2ee6a6; }
 .chip-mal { background: rgba(255,77,109,.14); color: var(--rojo); }
 .chip-espera { background: rgba(124,77,255,.18); color: #b9a2ff; }
+.abonos { font-size: 13.5px; color: var(--suave); }
+.abonos summary { cursor: pointer; font-weight: 500; }
+.abonos ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.abonos li { display: flex; align-items: center; gap: 10px; }
+.abonos li strong { color: var(--texto); margin-left: auto; }
+.abonos li button { font-size: 13px; padding: 0; }
 .deuda-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 4px; }
 .sello {
   position: absolute; right: 14px; top: 54px; transform: rotate(-14deg);
   font-family: var(--marcador); font-size: 22px; color: #2ee6a6;
   border: 3px solid #2ee6a6; padding: 2px 12px; border-radius: 8px; opacity: .85;
 }
+
+/* ---------- Tarjeta de apuesta ---------- */
+.apuesta { border-top-color: var(--morado); }
+.apuesta-activa { border-top-color: var(--lima); }
+.apuesta-resuelta { border-top-color: var(--amarillo); }
+.apuesta-rechazada, .apuesta-anulada { opacity: .72; border-top-color: var(--suave); }
+.apuesta-cabeza { display: flex; flex-direction: column; gap: 2px; }
+.apuesta-cabeza h3 { font-size: 17px; overflow-wrap: anywhere; }
+.apuesta .monto { color: var(--lima); }
+.apuesta-versus { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+.apuesta-vs { color: var(--naranja); font-size: 20px; }
+.apostador {
+  min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  text-align: center; padding: 12px 8px; background: var(--bg);
+  border: 2px solid transparent; border-radius: 14px; overflow-wrap: anywhere;
+}
+.apostador strong { font-size: 14px; margin-top: 4px; }
+.apostador-ganador { border-color: var(--amarillo); }
+.apostador-postura { color: var(--suave); font-size: 13px; }
+.apuesta-juez { color: var(--suave); font-size: 14px; }
+.apuesta-juez b { color: var(--texto); font-weight: 600; }
+.decidir-titulo { margin-bottom: 0; }
+.decidir-opciones { display: flex; flex-direction: column; gap: 8px; }
+.decidir-opcion {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; text-align: left;
+  border: 2px solid var(--borde); border-radius: 16px;
+}
+.decidir-opcion span { color: var(--suave); font-size: 13.5px; }
+.decidir-opcion.activo { border-color: var(--lima); background: rgba(212,255,58,.08); }
 
 /* ---------- Filtros ---------- */
 .filtros { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; align-items: center; }
@@ -432,7 +467,7 @@ input[type=date] { color-scheme: dark; }
   }
   .nav-movil button {
     display: flex; flex-direction: column; align-items: center; gap: 2px;
-    font-size: 11px; color: var(--suave); padding: 4px 8px; min-width: 56px; position: relative;
+    font-size: 10.5px; color: var(--suave); padding: 4px 2px; min-width: 44px; position: relative;
   }
   .nav-movil button span { font-size: 20px; line-height: 1; position: relative; }
   .nav-movil button.activo { color: var(--lima); }

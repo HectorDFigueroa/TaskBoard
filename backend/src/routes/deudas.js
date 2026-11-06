@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { pool } from '../db.js';
+import { pool, enTransaccion } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
-import { validarDeuda, validarId } from '../validators/deudas.js';
+import { validarDeuda, validarId, errorMonto } from '../validators/deudas.js';
+import { ErrorHttp } from '../utils/errores.js';
 import { SQL_VISTA, buscarVisible, permisos, formatear } from '../services/deudas.js';
 import { calcularInteres } from '../utils/interes.js';
 import { hoyISO, esFechaValida } from '../utils/fechas.js';
@@ -207,6 +208,10 @@ router.put('/:id', h(async (req, res) => {
   if (fila.estado_vinculo === 'aceptada' && Object.keys(datos).some((c) => c !== 'concepto')) {
     return conflicto(res, 'La otra persona ya aceptó esta deuda: solo puedes cambiar el concepto');
   }
+  const tieneAbonos = fila.pagos.length > 0;
+  if (tieneAbonos && Object.keys(datos).some((c) => c !== 'concepto')) {
+    return conflicto(res, 'Esta deuda ya tiene abonos: solo puedes cambiar el concepto');
+  }
   if (!p.editar && !p.editar_concepto) return prohibido(res, 'No puedes editar esta deuda');
 
   // Fechas contra las que ya están guardadas (RN-03)
@@ -232,7 +237,7 @@ router.put('/:id', h(async (req, res) => {
       cambios.persona = c.nombre;
       cambios.estado_vinculo = 'pendiente';
     }
-  } else if (fila.estado_vinculo === 'rechazada') {
+  } else if (fila.estado_vinculo === 'rechazada' && !tieneAbonos) {
     // Si corrige una deuda rechazada, se le vuelve a enviar a la otra persona
     cambios.estado_vinculo = 'pendiente';
   }
@@ -267,49 +272,116 @@ router.delete('/:id', h(async (req, res) => {
 // ============================================================
 
 /**
- * PATCH /api/deudas/:id/pagar — RF-06
+ * Bloquea la deuda y la carga dentro de una transacción, para que dos pagos
+ * simultáneos no puedan sumar más que el saldo.
+ */
+async function bloquear(req, db) {
+  const id = validarId(req.params.id);
+  if (!id) throw new ErrorHttp(400, 'id inválido');
+  await db.query('SELECT 1 FROM deudas WHERE id = $1 FOR UPDATE', [id]);
+  const fila = await buscarVisible(id, req.usuario.id, db);
+  if (!fila) throw new ErrorHttp(404, 'La deuda no existe'); // RN-11
+  return fila;
+}
+
+/**
+ * Registra un pago. Sin monto, paga todo el saldo a esa fecha.
+ * Si el pago cubre el saldo, la deuda queda pagada y monto_pagado congela lo pagado en total.
+ */
+async function registrarPago(req, { monto, fecha: fechaEnviada }) {
+  return enTransaccion(async (db) => {
+    const fila = await bloquear(req, db);
+
+    if (fila.pagada) throw new ErrorHttp(409, 'Esta deuda ya está marcada como pagada'); // RN-05
+    if (fila.estado_vinculo === 'pendiente') {
+      throw new ErrorHttp(409, 'La otra persona todavía no ha aceptado esta deuda');
+    }
+    if (!permisos(fila).pagar) {
+      throw new ErrorHttp(403, 'Solo quien prestó el dinero puede registrar pagos de esta deuda'); // RN-16
+    }
+
+    const fecha = fechaEnviada || hoyISO();
+    const ultimoPago = fila.pagos.at(-1)?.fecha;
+    if (!esFechaValida(fecha)) throw new ErrorHttp(400, 'La fecha del pago debe tener formato YYYY-MM-DD');
+    if (fecha > hoyISO()) throw new ErrorHttp(400, 'La fecha del pago no puede estar en el futuro');
+    if (fecha < fila.fecha) throw new ErrorHttp(400, 'La fecha del pago no puede ser anterior a la fecha de la deuda');
+    if (ultimoPago && fecha < ultimoPago) throw new ErrorHttp(400, 'La fecha del pago no puede ser anterior a la del último abono');
+
+    const { total: saldo, abonado } = calcularInteres(fila, fecha, fila.pagos);
+    const pago = monto ?? saldo;
+    if (pago > saldo) throw new ErrorHttp(400, `El abono no puede superar el saldo de $${saldo.toLocaleString('es-CO')}`);
+
+    await db.query('INSERT INTO pagos (deuda_id, monto, fecha) VALUES ($1, $2, $3)', [fila.id, pago, fecha]);
+    if (pago === saldo) {
+      await db.query(
+        `UPDATE deudas SET pagada = TRUE, fecha_pago = $1, monto_pagado = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [fecha, Math.round((abonado + pago) * 100) / 100, fila.id]
+      );
+    } else {
+      await db.query('UPDATE deudas SET updated_at = NOW() WHERE id = $1', [fila.id]);
+    }
+    return formatear(await buscarVisible(fila.id, req.usuario.id, db));
+  });
+}
+
+/**
+ * PATCH /api/deudas/:id/pagar — RF-06. Paga todo el saldo.
  * body opcional: { "fecha_pago": "YYYY-MM-DD" } (por defecto hoy)
- * Congela el total con intereses en monto_pagado.
  */
 router.patch('/:id/pagar', h(async (req, res) => {
-  const fila = await cargar(req, res);
-  if (!fila) return;
-
-  if (fila.pagada) return conflicto(res, 'Esta deuda ya está marcada como pagada'); // RN-05
-  if (fila.estado_vinculo === 'pendiente') {
-    return conflicto(res, 'La otra persona todavía no ha aceptado esta deuda');
-  }
-  if (!permisos(fila).pagar) {
-    return prohibido(res, 'Solo quien prestó el dinero puede marcar esta deuda como pagada'); // RN-16
-  }
-
-  const fechaPago = req.body?.fecha_pago || hoyISO();
-  if (!esFechaValida(fechaPago)) return res.status(400).json({ errores: ['fecha_pago debe tener formato YYYY-MM-DD'] });
-  if (fechaPago > hoyISO()) return res.status(400).json({ errores: ['fecha_pago no puede estar en el futuro'] });
-  if (fechaPago < fila.fecha) return res.status(400).json({ errores: ['fecha_pago no puede ser anterior a la fecha de la deuda'] });
-
-  const { total } = calcularInteres(fila, fechaPago);
-  await pool.query(
-    `UPDATE deudas SET pagada = TRUE, fecha_pago = $1, monto_pagado = $2, updated_at = NOW()
-     WHERE id = $3`,
-    [fechaPago, total, fila.id]
-  );
-  res.json(formatear(await buscarVisible(fila.id, req.usuario.id)));
+  res.json(await registrarPago(req, { fecha: req.body?.fecha_pago }));
 }));
 
-/** PATCH /api/deudas/:id/reabrir — RF-07 */
-router.patch('/:id/reabrir', h(async (req, res) => {
-  const fila = await cargar(req, res);
-  if (!fila) return;
-  if (!fila.pagada) return conflicto(res, 'Esta deuda todavía está pendiente');
-  if (!permisos(fila).reabrir) return prohibido(res, 'Solo quien prestó el dinero puede reabrir esta deuda');
+/**
+ * POST /api/deudas/:id/pagos — Abono parcial. body: { "monto": 20000, "fecha": "YYYY-MM-DD" }
+ * Si el abono cubre todo el saldo, la deuda queda pagada.
+ */
+router.post('/:id/pagos', h(async (req, res) => {
+  const monto = typeof req.body?.monto === 'string' ? Number(req.body.monto) : req.body?.monto;
+  const error = errorMonto(monto);
+  if (error) return res.status(400).json({ errores: [error] });
+  res.status(201).json(await registrarPago(req, { monto, fecha: req.body?.fecha }));
+}));
 
-  await pool.query(
-    `UPDATE deudas SET pagada = FALSE, fecha_pago = NULL, monto_pagado = NULL, updated_at = NOW()
-     WHERE id = $1`,
-    [fila.id]
-  );
-  res.json(formatear(await buscarVisible(fila.id, req.usuario.id)));
+/** DELETE /api/deudas/:id/pagos/:pagoId — Deshace un abono. Solo el último, para no alterar los siguientes */
+router.delete('/:id/pagos/:pagoId', h(async (req, res) => {
+  const resultado = await enTransaccion(async (db) => {
+    const fila = await bloquear(req, db);
+    if (fila.pagada) throw new ErrorHttp(409, 'Esta deuda ya está pagada; primero reábrela');
+    if (!permisos(fila).deshacer_abono) {
+      throw new ErrorHttp(403, 'Solo quien prestó el dinero puede deshacer abonos de esta deuda');
+    }
+    if (fila.pagos.at(-1)?.id !== validarId(req.params.pagoId)) {
+      throw new ErrorHttp(409, 'Solo se puede deshacer el último abono');
+    }
+    await db.query('DELETE FROM pagos WHERE id = $1', [req.params.pagoId]);
+    await db.query('UPDATE deudas SET updated_at = NOW() WHERE id = $1', [fila.id]);
+    return formatear(await buscarVisible(fila.id, req.usuario.id, db));
+  });
+  res.json(resultado);
+}));
+
+/**
+ * PATCH /api/deudas/:id/reabrir — RF-07
+ * Deshace el pago que saldó la deuda; los abonos anteriores se conservan.
+ */
+router.patch('/:id/reabrir', h(async (req, res) => {
+  const resultado = await enTransaccion(async (db) => {
+    const fila = await bloquear(req, db);
+    if (!fila.pagada) throw new ErrorHttp(409, 'Esta deuda todavía está pendiente');
+    if (!permisos(fila).reabrir) throw new ErrorHttp(403, 'Solo quien prestó el dinero puede reabrir esta deuda');
+
+    const ultimoPago = fila.pagos.at(-1);
+    if (ultimoPago) await db.query('DELETE FROM pagos WHERE id = $1', [ultimoPago.id]);
+    await db.query(
+      `UPDATE deudas SET pagada = FALSE, fecha_pago = NULL, monto_pagado = NULL, updated_at = NOW()
+       WHERE id = $1`,
+      [fila.id]
+    );
+    return formatear(await buscarVisible(fila.id, req.usuario.id, db));
+  });
+  res.json(resultado);
 }));
 
 /** PATCH /api/deudas/:id/aceptar y /rechazar — RF-21. Solo la contraparte */

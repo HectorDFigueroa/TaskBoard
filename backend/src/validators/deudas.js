@@ -12,6 +12,15 @@ const TIPOS_INTERES = ['ninguno', 'simple', 'compuesto'];
 const viene = (body, campo) => body[campo] !== undefined;
 const vacio = (v) => v === null || v === '';
 
+/** Reglas del monto (RN-01). Devuelve el mensaje de error, o null si es válido. */
+export function errorMonto(m) {
+  if (typeof m !== 'number' || !Number.isFinite(m)) return 'monto es obligatorio y debe ser numérico';
+  if (m <= 0) return 'monto debe ser mayor que 0';
+  if (m > MONTO_MAX) return 'monto no puede superar $100.000.000';
+  if (Math.abs(Math.round(m * 100) - m * 100) > 1e-6) return 'monto admite máximo 2 decimales';
+  return null;
+}
+
 export function validarDeuda(body = {}, { parcial = false } = {}) {
   const errores = [];
   const datos = {};
@@ -44,10 +53,8 @@ export function validarDeuda(body = {}, { parcial = false } = {}) {
   // monto (RN-01)
   if (viene(body, 'monto') || !parcial) {
     const m = typeof body.monto === 'string' ? Number(body.monto) : body.monto;
-    if (typeof m !== 'number' || !Number.isFinite(m)) errores.push('monto es obligatorio y debe ser numérico');
-    else if (m <= 0) errores.push('monto debe ser mayor que 0');
-    else if (m > MONTO_MAX) errores.push('monto no puede superar $100.000.000');
-    else if (Math.abs(Math.round(m * 100) - m * 100) > 1e-6) errores.push('monto admite máximo 2 decimales');
+    const error = errorMonto(m);
+    if (error) errores.push(error);
     else datos.monto = m;
   }
 

@@ -6,17 +6,17 @@ Node.js + Express + PostgreSQL. Autenticación con JWT y contraseñas con bcrypt
 
 ```
 backend/
-├── db/schema.sql            # Tablas usuarios y deudas (se ejecuta al arrancar)
+├── db/schema.sql            # Tablas usuarios, deudas y apuestas (se ejecuta al arrancar)
 ├── src/
 │   ├── index.js             # Arranque: valida variables, crea tablas, levanta el servidor
 │   ├── app.js               # Express: CORS, JSON, rutas, manejo de errores
 │   ├── db.js                # Conexión a PostgreSQL
 │   ├── middleware/auth.js   # Firma y verificación del token JWT
-│   ├── validators/          # Validación de entrada (auth y deudas)
-│   ├── services/deudas.js   # Vista desde cada usuario, permisos y formato de respuesta
+│   ├── validators/          # Validación de entrada (auth, deudas y apuestas)
+│   ├── services/            # Vista desde cada usuario, permisos y formato de respuesta
 │   ├── utils/               # Fechas (hora Colombia) e intereses
-│   └── routes/              # auth, usuarios, deudas
-└── test/api.test.js         # 19 pruebas de punta a punta
+│   └── routes/              # auth, usuarios, deudas, apuestas
+└── test/api.test.js         # Pruebas de punta a punta
 ```
 
 ## Correr en local
@@ -82,8 +82,10 @@ Todas las rutas excepto `/api/health`, `register` y `login` requieren el encabez
 | POST | `/api/deudas` | Crear (ver cuerpo abajo) |
 | PUT | `/api/deudas/:id` | Editar (solo campos enviados) |
 | DELETE | `/api/deudas/:id` | Eliminar |
-| PATCH | `/api/deudas/:id/pagar` | Marcar pagada. Opcional `{ fecha_pago }` |
-| PATCH | `/api/deudas/:id/reabrir` | Deshacer el pago |
+| PATCH | `/api/deudas/:id/pagar` | Pagar todo el saldo. Opcional `{ fecha_pago }` |
+| POST | `/api/deudas/:id/pagos` | Abono parcial: `{ monto, fecha }` (`fecha` es opcional) |
+| DELETE | `/api/deudas/:id/pagos/:pagoId` | Deshacer el último abono |
+| PATCH | `/api/deudas/:id/reabrir` | Deshacer el pago que saldó la deuda (conserva los abonos anteriores) |
 | PATCH | `/api/deudas/:id/aceptar` | Aceptar una deuda vinculada (la contraparte) |
 | PATCH | `/api/deudas/:id/rechazar` | Rechazar una deuda vinculada (la contraparte) |
 
@@ -107,8 +109,57 @@ Todas las rutas excepto `/api/health`, `register` y `login` requieren el encabez
 - Para editar el interés con `PUT` hay que enviar `tipo_interes` y `tasa_interes` juntos.
 
 **Cada deuda se devuelve desde el punto de vista de quien consulta**, con campos calculados:
-`interes_acumulado`, `total_a_hoy`, `dias_transcurridos`, `vencida` y `permisos`
-(`editar`, `eliminar`, `pagar`, `reabrir`, `responder`), para que el frontend sepa qué botones mostrar.
+`interes_acumulado`, `total_a_hoy`, `pagos`, `abonado`, `dias_transcurridos`, `vencida` y `permisos`
+(`editar`, `eliminar`, `pagar`, `deshacer_abono`, `reabrir`, `responder`), para que el frontend sepa qué botones mostrar.
+
+**Pagos parciales:**
+- `total_a_hoy` es el saldo que falta. `interes_acumulado` es todo el interés generado, incluido el ya pagado.
+- Cada abono cubre primero el interés acumulado y luego el capital; desde ahí, el interés corre sobre lo que quedó.
+- Un abono no puede superar el saldo. Si lo cubre exacto, la deuda queda pagada.
+- Los pagos van en orden: la fecha no puede ser anterior a la del último abono.
+- Con abonos, de la deuda solo se puede editar el concepto.
+- Solo quien prestó el dinero registra o deshace pagos.
+
+### Apuestas
+
+Son siempre entre **usuarios registrados**: dos apostadores y un juez, tres personas distintas.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/apuestas` | Apuestas en las que participo (como apostador o juez) |
+| GET | `/api/apuestas/:id` | Detalle |
+| POST | `/api/apuestas` | Crear (ver cuerpo abajo) |
+| DELETE | `/api/apuestas/:id` | Eliminar (el creador, si está pendiente o rechazada) |
+| PATCH | `/api/apuestas/:id/aceptar` | Aceptar la invitación (oponente o juez) |
+| PATCH | `/api/apuestas/:id/rechazar` | Rechazar la invitación (oponente o juez) |
+| PATCH | `/api/apuestas/:id/decidir` | Declarar ganador (el juez): `{ "ganador": "@usuario" }` |
+| PATCH | `/api/apuestas/:id/anular` | Anular por empate o porque no se pudo definir (el juez) |
+| PATCH | `/api/apuestas/:id/revision/pedir` | Pedir cambiar la decisión (un apostador) |
+| PATCH | `/api/apuestas/:id/revision/aceptar` | Aceptar el cambio (el otro apostador) |
+| PATCH | `/api/apuestas/:id/revision/rechazar` | Rechazar el cambio, o retirar la solicitud propia |
+
+**Cuerpo para crear una apuesta (todos los campos son obligatorios):**
+```json
+{
+  "titulo": "Quién gana el clásico",
+  "postura_creador": "Gana Nacional",
+  "postura_oponente": "Gana Millonarios",
+  "monto": 20000,
+  "oponente": "@juan",
+  "juez": "@ana"
+}
+```
+
+**Estados:** `pendiente` (falta que acepten) → `activa` (aceptaron oponente y juez) → `resuelta` o `anulada`.
+Si un invitado rechaza, queda `rechazada`.
+
+- Los términos no se editan. Para cambiarlos, el creador elimina la apuesta y crea otra.
+- Una apuesta activa no la puede eliminar nadie: solo el juez puede cerrarla.
+- La decisión del juez crea una deuda ya aceptada del perdedor al ganador, que entra al balance de ambos.
+  Se paga como cualquier deuda, también con abonos: el ganador registra los pagos, y los tres ven el estado.
+- La decisión solo cambia si **los dos apostadores están de acuerdo**: uno lo pide y el otro acepta. Entonces
+  se borra la deuda, la apuesta vuelve a estar activa y el juez decide de nuevo.
+- No se puede cambiar si hay pagos registrados: el ganador debe deshacerlos primero.
 
 ## Códigos HTTP
 
