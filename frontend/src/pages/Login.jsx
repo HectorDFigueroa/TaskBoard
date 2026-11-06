@@ -71,11 +71,11 @@ export default function Login() {
             <>
               <label className="campo">
                 <span className="campo-label">Tu nombre</span>
-                <input value={f.nombre} onChange={cambiar('nombre')} placeholder="Hector Figueroa" autoComplete="name" />
+                <input value={f.nombre} onChange={cambiar('nombre')} placeholder="Nombre y apellido" autoComplete="name" />
               </label>
               <label className="campo">
                 <span className="campo-label">Usuario <em>(para que tus amigos te encuentren)</em></span>
-                <input value={f.username} onChange={cambiar('username')} placeholder="@hector" autoCapitalize="none" autoComplete="username" />
+                <input value={f.username} onChange={cambiar('username')} placeholder="@usuario" autoCapitalize="none" autoComplete="username" />
               </label>
             </>
           )}
