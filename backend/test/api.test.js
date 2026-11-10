@@ -1,5 +1,5 @@
 // Pruebas de la API de punta a punta contra una base de datos de PRUEBA.
-// ⚠️ Borra todos los datos de la base indicada en TEST_DATABASE_URL.
+// Borra todos los datos de la base indicada en TEST_DATABASE_URL.
 //
 // Uso:
 //   TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/quien_me_debe_test npm test
