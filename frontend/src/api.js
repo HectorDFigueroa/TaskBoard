@@ -1,6 +1,6 @@
 // Cliente de la API. Todas las peticiones pasan por aquí:
 // - agrega el token JWT
-// - convierte los errores del backend ({ errores: [...] }) en excepciones
+// - convierte los errores del backend  en excepciones
 // - avisa cuando una petición tarda (el plan gratis de Render "duerme" el servidor)
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
