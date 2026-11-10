@@ -5,7 +5,7 @@
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const TIEMPO_LENTO_MS = 2500;   // a partir de aquí mostramos "despertando el servidor"
-const TIEMPO_LIMITE_MS = 75000; // Render puede tardar ~1 minuto en despertar
+const TIEMPO_LIMITE_MS = 75000; // Render puede tardar 1 minuto en despertar
 
 let token = null;
 let alExpirar = () => {};
